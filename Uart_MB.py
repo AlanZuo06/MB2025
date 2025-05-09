@@ -54,21 +54,26 @@ class Uart:
         self.uart_head(Gostraight,direction,final_deviation)
 
     def uart_Board(self):
-        for i in range(5):
+        for i in range(15):
+            time.sleep(0.15)
             self.uart_head(Board,0,0)
+            
+            
 
     def uart_Hexagon(self,deviation):
         if deviation>0:
             direction=0
         else:
             direction=1
-        for i in range(5):
+        for i in range(15):
+            time.sleep(0.15)
             self.uart_head(hexagon,direction,0)
+
 
 
 if __name__ == "__main__":
     uart = Uart()
-    uart.uart_Gostraight(-100)
+    uart.uart_Board()
     #uart.uart_Gostraight(100)
 
 

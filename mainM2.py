@@ -15,6 +15,21 @@ def Cam_Init():
     cam.set(cv2.CAP_PROP_FRAME_WIDTH, wide)
     cam.set(cv2.CAP_PROP_FRAME_HEIGHT, height)
     return cam
+
+def Uart_send():
+    global Board_send_flag,Boarder_flag,Hexagon_flag,Hexagon_send_flag,pid_output,error
+    uart = Uart()
+    while True:
+        if not Boarder_flag and Board_send_flag:
+            uart.uart_Board()
+            Board_send_flag=False
+        elif not Hexagon_flag and Hexagon_flag:
+            uart.uart_Hexagon(error)
+            Hexagon_flag=False
+        else:
+            uart.uart_Gostraight(pid_output)
+        time.sleep(0.2)
+
 # PID控制器类
 class PIDController:
     def __init__(self, kp, ki, kd, output_min, output_max, integral_min, integral_max, integral_threshold):
@@ -159,7 +174,7 @@ class Boarder:
             approx = cv2.approxPolyDP(contour, epsilon, True)
             # cv2.drawContours(image, [approx], 0, (0, 255, 0), 1)
             area = cv2.contourArea(approx)
-            if area > 100:
+            if area > 1000:
                 return False
         return True
 # 图像处理类
@@ -194,33 +209,38 @@ if __name__ == "__main__":
     #全局变量
     globle_ret=False
     globle_img=None
-
+    error=0
+    pid_output=0
     #标志
     Hexagon_flag=True
+    Hexagon_send_flag = True
     Boarder_flag=True
+    Board_send_flag=True
 
     cam =Cam_Init()#相机初始化
     processor=ImageProcessor(cam)
-    uart=Uart()
+
 
     # 摄像头线程
     lock = threading.Lock()
     cam_threading = threading.Thread(target=processor.img_read, args=(cam,), name="cam_threading")
     cam_threading.daemon = True
     cam_threading.start()
+    # 串口线程
+    uart_threading = threading.Thread(target=Uart_send, args=(), name="uart_threading")
+    uart_threading.daemon = True
+    uart_threading.start()
 
     while True:
         img=globle_img
         ret=globle_ret
-        if not ret:
+        if not ret or img is None:
             continue
 
         """找障碍"""
         if Boarder_flag:
             Boarder_flag = processor.detect_Poly(img)
-            if not Boarder_flag:
-                uart.uart_Board()
-            else:
+            if Boarder_flag:
                 cv2.putText(img, "NO Board", (300, 90), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 255), 3)
 
         """找中心"""
@@ -240,10 +260,9 @@ if __name__ == "__main__":
         if abs(error)>=timeToLine and Hexagon_flag:
             angel_int1, angel_float1, angel_int2, angel_float2 = processor.parallel(frame)
             Dangel = angel_int1 - angel_int2
+            cv2.putText(img, f"NO 30", (0, 90), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 255), 3)
             if abs(Dangel - 30) < 10:#找到了
-                uart.uart_Hexagon(error)
                 Hexagon_flag = False
-                cv2.putText(img, f"30!!!", (0, 90), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 255), 3)
         else:
             angel_int1, angel_float1, angel_int2, angel_float2, Dangel=0,0,0,0,0
 
@@ -253,9 +272,6 @@ if __name__ == "__main__":
         print(f"dx:{error}")
         print(f"angle1:{angel_int1}.{angel_float1},angle2:{angel_int2}.{angel_float2},\nDangel:{Dangel}")
         print(f"pid_output:{pid_output}\n")
-
-        #发送
-        uart.uart_Gostraight(pid_output)
 
         cv2.imshow("img", img)
 
